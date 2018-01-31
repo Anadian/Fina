@@ -1,6 +1,9 @@
 #!/usr/local/bin/node
 
 const FileSystem = require('fs');
+const Path = require('path');
+const OperatingSystem = require('os');
+
 const CommandLineArguments = require('command-line-args');
 const CommandLineUsage = require('command-line-usage');
 const NanoID = require('nanoid');
@@ -17,61 +20,90 @@ const ParseJSON = require('parse-json');
  * query
 */
 const OptionDefinitions = [
+	{name: 'help', alias: 'h', type: Boolean, description: 'Display this help text and exit.'},
+	{name: 'version', alias: 'V', type: Boolean, description: 'Display version information and exit.'},
+	{name: 'verbose', alias: 'v', type: Boolean, description: 'Verbose printing to stdout.'},
 	{name: 'file', alias: 'f', type: String, description: 'The JSON file to use.'},
+	{name: 'directory', alias: 'R', type: String, description: 'The base directory to store files; defaults to "$HOME/fina"'},
 	{name: 'date', alias: 'd', type: String, description: 'The date; defaults to current date.'},
 	{name: 'merchant', alias: 'm', type: String},
 	{name: 'order', alias: 'o', type: String},
-	{name: 'net-effect', alias: 'n', type: Number},
-	{name: 'type', alias: 't', type: String},
+	{name: 'cost', alias: 'c', type: Number},
+	{name: 'type', alias: 't', type: String, description: 'Type of transaction: debit, credit, cash, et cetera.'},
 	{name: 'preconverted', alias: 'P', Number},
-	{name: 'estimated-arrival', alias: 'e', type: String, description: 'Estimated Arrival date; defaults to transaction date.'},
-	{name: 'have', alias: 'h', type: Boolean},
+	{name: 'estimated-arrival', alias: 'E', type: String, description: 'Estimated Arrival date; defaults to transaction date.'},
+	{name: 'arrival', alias: 'A', type: String, description: 'Actual Arrival date; defaults to transaction date.'},
+	{name: 'have', alias: 'n', type: Boolean},
 	{name: 'payed', alias: 'p', type: Boolean},
 	{name: 'refunded', alias: 'r', type: Boolean},
 	{name: 'tags', alias: 'T', type: String},
-	{name: 'query', alias: 'q', type: Boolean}
+	{name: 'notes', alias: 'N', type: String}
 ];
 
 if(require.main === module){
 	const Options = CommandLineArguments(OptionDefinitions);
-	//File stuff
-	console.dir(Date);
-	var date_object = new Date();
-	var year_number = date_object.getUTCFullYear();
-	var month_number = date_object.getUTCMonth()+1;
-	var filename = '/Users/cameron/fina/'+year_number.toString()+'/'+month_number.toString()+'.json';
-	var file_data = FileSystem.readFileSync(filename, 'utf8');
-	var json_object = ParseJSON(file_data, filename);
-	//Preparing item
-	var item = {
-		id: NanoID(),
-		date: date_object.toISOString(),
-		merchant: null,
-		order: null,
-		net_effect: 0,
-		type: "debit",
-		preconverted: null,
-		estimated_arrival: null,
-		have: false,
-		payed: false,
-		refunded: false,
-		tags: null
-	};
-	//optfills
-	if(Options.date != null) item.date = Options.date;
-	if(Options.merchant != null) item.merchant = Options.merchant;
-	if(Options.order != null) item.order = Options.order;
-	if(Options.net_effect != null) item.net_effect = Options.net_effect;
-	if(Options.type != null) item.type = Options.type;
-	if(Options.preconverted != null) item.preconverted = Options.preconverted;
-	if(Options.estimated_arrival != null) item.estimated_arrival = Options.estimated_arrival;
-	if(Options.have != null) item.have = Options.have;
-	if(Options.payed != null) item.payed = Options.payed;
-	if(Options.refunded != null) item.refunded = Options.refunded;
-	if(Options.tags != null) item.tags = Options.tags;
-	//JSON stuff
-	if(json_object.items === undefined) json_object.items = [];
-	json_object.items.push(item);
-	file_data = JSON.stringify(json_object, null, '\t');
-	FileSystem.writeFileSync(filename, file_data, 'utf8');
+	if(Options.help != null){
+		console.log(CommandLineUsage(OptionDefinitions));
+	} else if(Options.versions != null){
+		console.log(FINA_VERSION);
+	} else{
+		var file_data = null;
+		var json_object = {purchases: []};
+		
+		var filename = null;
+		//File stuff
+		if(Options.file != null) filename = Options.file;
+		else{
+			var home_directory = OperatingSystem.homedir();
+			var date_object = new Date();
+			var year_number = date_object.getUTCFullYear();
+			var month_number = date_object.getUTCMonth()+1;
+			var fina_directory = null;
+			if(Options.directory != null) fina_directory = Options.directory;
+			else fina_directory = Path.join(home_directory,'fina');
+			if(FileSystem.existsSync(fina_directory) === false) FileSystem.mkdirSync(fina_directory);
+			var year_directory = Path.join(fina_directory,year_number.toString());
+			if(FileSystem.existsSync(year_directory) === false) FileSystem.mkdirSync(year_directory);
+			filename = Path.join(year_directory,month_number.toString(),'.json');
+		}
+		if(FileSystem.existsSync(filename) === true){
+			file_data = FileSystem.readFileSync(filename, 'utf8');
+			json_object = ParseJSON(file_data, filename);
+		}
+		//Preparing purchase
+		var purchase = {
+			id: NanoID(),
+			date: date_object.toISOString(),
+			merchant: null,
+			order: null,
+			cost: 0,
+			type: "debit",
+			preconverted: null,
+			estimated_arrival: null,
+			arrival: null,
+			have: false,
+			payed: false,
+			refunded: false,
+			tags: null,
+			notes: null
+		};
+		//optfills
+		if(Options.date != null) purchase.date = Options.date;
+		if(Options.merchant != null) purchase.merchant = Options.merchant;
+		if(Options.order != null) purchase.order = Options.order;
+		if(Options.cost != null) purchase.cost = Options.cost;
+		if(Options.type != null) purchase.type = Options.type;
+		if(Options.preconverted != null) purchase.preconverted = Options.preconverted;
+		if(Options.estimated_arrival != null) purchase.estimated_arrival = Options.estimated_arrival;
+		if(Options.arrival != null) purchase.arrival = Options.arrival;
+		if(Options.have != null) purchase.have = !(Options.have);
+		if(Options.payed != null) purchase.payed = Options.payed;
+		if(Options.refunded != null) purchase.refunded = Options.refunded;
+		if(Options.tags != null) purchase.tags = Options.tags;
+		if(Options.notes != null) purchase.notes = Options.notes;
+		//JSON stuff
+		json_object.purchases.push(purchase);
+		file_data = JSON.stringify(json_object, null, '\t');
+		FileSystem.writeFileSync(filename, file_data, 'utf8');
+	}
 }
